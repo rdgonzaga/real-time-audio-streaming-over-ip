@@ -11,14 +11,14 @@ import sounddevice as sd
 
 @dataclass(frozen=True)
 class WavParams:
-	channels: int  # channels: 1 = mono, 2 = stereo
-	sample_width: int # sample_width: bytes per sample (1, 2, or 4)
-	sample_rate: int # sample_rate: samples per second (e.g., 8000, 16000, 44100)
-	frame_count: int # frame_count: total samples-per-channel in the file
+	channels: int  # 1 = mono, 2 = stereo
+	sample_width: int # bytes per sample (1, 2, or 4)
+	sample_rate: int #  samples per second 
+	frame_count: int # total samples-per-channel in the file
 
 
 def get_wav_params(filename: str) -> WavParams:
-	# read WAV metadata so sender/receiver can agree on playback settings
+	""" read wav metadata so sender/receiver can agree on playback settings"""
 	with wave.open(filename, "rb") as wav_file:
 		return WavParams(
 			channels=wav_file.getnchannels(),
@@ -29,7 +29,7 @@ def get_wav_params(filename: str) -> WavParams:
 
 
 def read_wav_frames(filename: str, chunk_size: int):
-	# Yield raw PCM chunks from a WAV file.
+	"""yield raw pcm chunks from a wav file"""
 	if chunk_size <= 0:
 		raise ValueError("chunk_size must be > 0")
 
@@ -43,7 +43,7 @@ def read_wav_frames(filename: str, chunk_size: int):
 
 
 def microphone_frames(chunk_size: int):
-	# later na to for bonus
+	"""later na to for bonus"""
 	raise NotImplementedError("not yet implemented")
 
 
@@ -53,7 +53,7 @@ def play_audio_frame(
 	channels: int = 1,
 	sample_width: int = 2,
 ) -> bool:
-	# play one pcm frame. 
+	"""play one pcm frame"""
 	if not frame:
 		return True
 
@@ -75,8 +75,7 @@ def play_audio_frame(
 
 
 def validate_mode(mode: str, audio_file: str = "") -> None:
-	# validate source mode before media threads start
-	# fail early so call setup does not start with a broken config.
+	"""	validate source mode before media threads start. """
 	normalized_mode = mode.strip().lower()
 	if normalized_mode not in {"file", "mic"}:
 		raise ValueError("mode must be either 'file' or 'mic'")

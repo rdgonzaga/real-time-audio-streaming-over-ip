@@ -13,13 +13,17 @@ NTP_UNIX_EPOCH_OFFSET = 2_208_988_800
 
 
 def build_rtp_packet(payload, seq, timestamp, ssrc, payload_type=0):
-	# header format: rtp version (2bits), padding (1bit)
-	# extension (1bit), cc (4 bit), m(1bit), payload type (7bit)
+	"""
+	build RTP packet with header and payload.
+	format of header: rtp version (2bits), padding (1bit), extension (1bit), 
+	cc (4 bit), m(1bit), payload type (7bit)
+	"""
 	if not (0 <= payload_type <= 127):
 		raise ValueError("payload_type must be in [0, 127]")
 
 	first_byte = RTP_VERSION << 6
 	second_byte = payload_type & 0x7F
+
 	# B B H I I = 1B,1B,2B,4B,4B = 12 bytes total
 	header = struct.pack(
 		"!BBHII",
@@ -33,7 +37,7 @@ def build_rtp_packet(payload, seq, timestamp, ssrc, payload_type=0):
 
 
 def parse_rtp_packet(data):
-	# parse RTP header fields and return payload + metadata
+	"""parse RTP header fields and return payload + metadata"""
 	if len(data) < RTP_HEADER_SIZE:
 		raise ValueError("RTP packet too short")
 
@@ -57,8 +61,7 @@ def parse_rtp_packet(data):
 
 
 def build_rtcp_sr(ssrc, packet_count, octet_count):
-	# build minimal RTCP Sender Report (no receiver report blocks)
-	# sr gives the receiver timing + throughput stats from the sender
+	"""	build rtcp sender report """
 	now = time.time()
 	ntp_seconds = int(now) + NTP_UNIX_EPOCH_OFFSET
 	ntp_fraction = int((now - int(now)) * (1 << 32))
@@ -79,7 +82,7 @@ def build_rtcp_sr(ssrc, packet_count, octet_count):
 
 
 def rtp_send_loop(sock, remote_addr, audio_source, stop_event):
-	# send frames until source ends or stop_event is set
+	"""send frames until source ends or stop_event is set"""
 	seq = random.randint(0, 0xFFFF)
 	timestamp = random.randint(0, 0xFFFFFFFF)
 	ssrc = random.randint(0, 0xFFFFFFFF)
@@ -130,7 +133,7 @@ def rtp_send_loop(sock, remote_addr, audio_source, stop_event):
 
 
 def rtp_receive_loop(sock, audio_player, stop_event):
-	# receive RTP packets and forward payload bytes to audio_player
+	"""receive rtp packets and forward payload bytes to audio_player"""
 	received_packets = 0
 	malformed_packets = 0
 	expected_seq = None
@@ -171,7 +174,7 @@ def rtp_receive_loop(sock, audio_player, stop_event):
 
 
 def rtcp_send_loop(sock, remote_addr, stop_event, stats):
-	# send RTCP sender reports periodically gamit shared counters
+	"""send rtcp sender reports periodically gamit shared counters"""
 	interval = getattr(stats, "interval", 5.0)
 	while not stop_event.is_set():
 		packet_count = 0
