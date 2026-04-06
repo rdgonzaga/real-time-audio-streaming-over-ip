@@ -7,6 +7,7 @@ import os
 import wave
 import numpy as np
 import sounddevice as sd
+import queue
 
 G711_SAMPLE_RATE = 8000
 G711_CHANNELS = 1
@@ -170,6 +171,98 @@ class G711AudioPlayer:
 					print("[AUDIO] Output stream closed")
 			except Exception as e:
 				print(f"[AUDIO ERROR] Failed to close stream: {e}")
+			self.stream = None
+
+class G711MicrophoneSource:
+	payload_type = PCMU_PAYLOAD_TYPE
+	timestamp_step = G711_FRAME_SIZE
+	packet_interval = G711_FRAME_DURATION_MS / 1000.0
+
+	def __init__(
+		self,
+		sample_rate: int = G711_SAMPLE_RATE,
+		channels: int = G711_CHANNELS,
+		frames_per_chunk: int = G711_FRAME_SIZE,
+		debug: bool = False,
+	):
+		self.sample_rate = sample_rate
+		self.channels = channels
+		self.frames_per_chunk = frames_per_chunk
+		self.debug = debug
+		self.frame_count = 0
+		self.closed = False
+		self.buffer = queue.Queue(maxsize=50)
+		self.stream = None
+		self._initialize_stream()
+
+	def _initialize_stream(self):
+		try:
+			self.stream = sd.InputStream(
+				samplerate=self.sample_rate,
+				channels=self.channels,
+				dtype="int16",
+				blocksize=self.frames_per_chunk,
+				callback=self._callback,
+			)
+			self.stream.start()
+			if self.debug:
+				print(f"[MIC] Input stream initialized: {self.sample_rate} Hz, {self.channels} channel(s)")
+		except Exception as e:
+			print(f"[MIC ERROR] Failed to initialize input stream: {e}")
+			self.stream = None
+
+	def _callback(self, indata, frames, time_info, status):
+		if status and self.debug:
+			print(f"[MIC] Status: {status}")
+
+		try:
+			pcm_bytes = indata.copy().tobytes()
+			ulaw_bytes = _lin16_bytes_to_ulaw(pcm_bytes)
+
+			# enforce 20 ms packet size
+			if len(ulaw_bytes) < G711_FRAME_SIZE:
+				ulaw_bytes += b"\xff" * (G711_FRAME_SIZE - len(ulaw_bytes))
+			elif len(ulaw_bytes) > G711_FRAME_SIZE:
+				ulaw_bytes =				ulaw_bytes = ulaw_bytes[:G711_FRAME_SIZE]
+
+			if self.buffer.full():
+				try:
+					self.buffer.get_nowait()
+				except queue.Empty:
+					pass
+
+			self.buffer.put_nowait(ulaw_bytes)
+		except Exception as e:
+			if self.debug:
+				print(f"[MIC ERROR] Callback failed: {e}")
+
+	def __iter__(self):
+		return self
+
+	def __next__(self):
+		if self.closed:
+			raise StopIteration
+
+		try:
+			frame = self.buffer.get(timeout=self.packet_interval * 2)
+			self.frame_count += 1
+			if self.debug and self.frame_count % 50 == 1:
+				print(f"[MIC] Captured frame {self.frame_count}, size={len(frame)} bytes")
+			return frame
+		except queue.Empty:
+			# comfort-noise style silence frame
+			return b"\xff" * G711_FRAME_SIZE
+
+	def close(self):
+		self.closed = True
+		if self.stream:
+			try:
+				self.stream.stop()
+				self.stream.close()
+				if self.debug:
+					print("[MIC] Input stream closed")
+			except Exception as e:
+				print(f"[MIC ERROR] Failed to close input stream: {e}")
 			self.stream = None
 
 def play_audio_frame(
