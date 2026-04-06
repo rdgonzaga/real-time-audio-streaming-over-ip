@@ -48,8 +48,8 @@ class Peer:
         self.audio_player = None
 
     def start(self):
-        self._start_sip_listener()
         self._print_banner()
+        self._start_sip_listener()
         self._command_loop()
 
     def _print_banner(self):
