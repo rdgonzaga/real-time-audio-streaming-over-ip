@@ -342,7 +342,16 @@ class Peer:
         if not self.call:
             return
 
-        self._stop_media()
+        if self.rtp_socket is None or self.rtcp_socket is None:
+            log("[MEDIA] RTP/RTCP sockets are not initialized.")
+            return
+
+        # stop only old threads if needed but DO NOT close sockets
+        if self.media_stop:
+            self.media_stop.set()
+            for t in self.media_threads:
+                t.join(timeout=0.2)
+
         self.media_stop = threading.Event()
         self.media_threads = []
         self.rtp_stats = RtpStats()
@@ -476,7 +485,7 @@ Commands:
                 if cmd == "help":
                     self.print_help()
                 elif cmd == "show":
-                    self.show()
+                    self._show_settings()
                 elif cmd == "setup":
                     self.setup()
                 elif cmd == "set" and len(parts) >= 3:
