@@ -82,7 +82,6 @@ The program will:
 1. Auto-detect your local IP address
 2. Bind to a SIP port (default: 5060)
 3. Display current settings
-4. Enter command mode with `voip>` prompt
 
 ### Initial Output Example
 
@@ -113,7 +112,7 @@ The application provides an interactive command-line interface:
 |---------|-------------|
 | `show` | Display current configuration and call state |
 | `setup` | Interactive configuration wizard |
-| `set <field> <value>` | Set individual configuration values |
+| `set <var> <value>` | Set individual configuration values |
 | `call` | Call the configured peer |
 | `call <ip> <port>` | Call a specific peer |
 | `answer` | Accept an incoming call |
@@ -123,13 +122,13 @@ The application provides an interactive command-line interface:
 
 ### Configuration Fields
 
-- `local_ip` — Your local IP address
-- `sip_port` — SIP listening port (default: 5060)
-- `peer_ip` — Remote peer's IP address
-- `peer_sip` — Remote peer's SIP port
-- `mode` — Audio source: `file` or `mic`
-- `audio` — WAV file path (when mode=file)
-- `auto_answer` — Automatically accept calls: `on` or `off`
+- `local_ip`: Your local IP address
+- `sip_port`: SIP listening port (default: 5060)
+- `peer_ip`: Remote peer's IP address
+- `peer_sip`: Remote peer's SIP port
+- `mode`: Audio source: `file` or `mic`
+- `audio`: WAV file path (when mode=file)
+- `auto_answer`: Automatically accept calls: `on` or `off`
 
 ### Example Usage
 
@@ -155,10 +154,10 @@ voip> hangup
 Full SIP call control over UDP based on RFC 3261
 
 **Supported Messages:**
-- **INVITE** — Initiates a call with SDP body containing media parameters
-- **200 OK** — Accepts call or acknowledges BYE
-- **ACK** — Confirms call establishment after 200 OK
-- **BYE** — Terminates an established call
+- **INVITE**: Initiates a call with SDP body containing media parameters
+- **200 OK**: Accepts call or acknowledges BYE
+- **ACK**: Confirms call establishment after 200 OK
+- **BYE**: Terminates an established call
 
 **Required Headers (all included):**
 - Via, From, To, Call-ID, CSeq, Contact, Content-Type, Content-Length
