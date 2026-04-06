@@ -6,11 +6,12 @@ import random
 from dataclasses import dataclass
 from typing import Optional
 
-
-DEFAULT_CODEC = "PCMU"
-DEFAULT_PAYLOAD_TYPE = 0
-DEFAULT_SAMPLE_RATE = 8000
-DEFAULT_CHANNELS = 1
+from constants import (
+	DEFAULT_CODEC,
+	DEFAULT_PAYLOAD_TYPE,
+	DEFAULT_SAMPLE_RATE,
+	DEFAULT_CHANNELS,
+)
 
 
 @dataclass
