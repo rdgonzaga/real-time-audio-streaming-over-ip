@@ -201,22 +201,31 @@ def build_ack(ok_msg: SipMessage, local_ip: str, local_port: int,
     return _build_message("ACK", request_uri, headers)
 
 
-def build_bye(call_info: SipMessage, local_ip: str, local_port: int) -> str:
+def build_bye(call_info: SipMessage, local_ip: str, local_port: int, cseq_number: int = 2) -> str:
     """ build SIP BYE message to terminate a call. """
 
-    # extract to URI for request URI
-    to_uri = call_info.to_uri
-    if to_uri.startswith("<") and ">" in to_uri:
-        request_uri = to_uri[1:to_uri.index(">")]
+    # based sa rfc 3261, use contact header dapat from prev response as request uri
+    # fall back to To header if Contact is not available
+    if call_info.contact:
+        contact_uri = call_info.contact
+        if contact_uri.startswith("<") and ">" in contact_uri:
+            request_uri = contact_uri[1:contact_uri.index(">")]
+        else:
+            request_uri = contact_uri.split(";")[0]
     else:
-        request_uri = to_uri.split(";")[0]
+        # fallback: extract from To header
+        to_uri = call_info.to_uri
+        if to_uri.startswith("<") and ">" in to_uri:
+            request_uri = to_uri[1:to_uri.index(">")]
+        else:
+            request_uri = to_uri.split(";")[0]
     
     headers = {
         "Via": f"SIP/2.0/UDP {local_ip}:{local_port};branch=z9hG4bK{random.randint(100000, 999999)}",
         "From": call_info.from_uri,
         "To": call_info.to_uri,
         "Call-ID": call_info.call_id,
-        "CSeq": "2 BYE",
+        "CSeq": f"{cseq_number} BYE",
         "Max-Forwards": "70",
     }
     
