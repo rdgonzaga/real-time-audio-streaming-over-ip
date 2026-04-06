@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 import threading
 import sys
-
+import time
 import random
 
 from audio import G711AudioPlayer, G711AudioSource, G711MicrophoneSource, validate_mode
@@ -449,6 +449,24 @@ class Peer:
         self.call = None
         self.state = CallState.IDLE
 
+    def _shutdown(self):
+        # end call first
+        if self.call and self.state in (CallState.OUTGOING, CallState.ESTABLISHED):
+            try:
+                self.hangup()
+            except Exception as exc:
+                log(f"[APP] Failed to send BYE during shutdown: {exc}")
+
+            # wait for 200 OK to BYE
+            deadline = time.time() + 1.0
+            while self.state != CallState.IDLE and time.time() < deadline:
+                time.sleep(0.05)
+
+        self.running = False
+        self._stop_media()
+        self._stop_sip_listener()
+        log("[APP] Goodbye.")
+
     def setup(self):
         old_ip, old_sip = self.config.local_ip, self.config.sip_port
         c = self.config
@@ -537,17 +555,12 @@ Commands:
                 elif cmd == "hangup":
                     self.hangup()
                 elif cmd == "quit":
-                    self.running = False
-                    self._stop_media()
-                    self._stop_sip_listener()
-                    log("[APP] Goodbye.")
+                    self._shutdown()
                 else:
                     log("[APP] Unknown command. Type 'help'.")
             except KeyboardInterrupt:
-                self.running = False
-                self._stop_media()
-                self._stop_sip_listener()
                 print("\n[APP] Interrupted. Exiting...")
+                self._shutdown()
                 break
             except Exception as exc:
                 log(f"[ERROR] {exc}")
