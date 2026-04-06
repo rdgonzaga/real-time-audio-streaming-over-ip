@@ -111,15 +111,27 @@ class G711AudioSource:
 class G711AudioPlayer:
 	"""Decode G.711 PCMU RTP payloads and play decoded PCM in real time."""
 
-	def __init__(self, sample_rate: int = G711_SAMPLE_RATE, channels: int = G711_CHANNELS):
+	def __init__(self, sample_rate: int = G711_SAMPLE_RATE, channels: int = G711_CHANNELS, debug: bool = False):
 		self.sample_rate = sample_rate
 		self.channels = channels
+		self.debug = debug
+		self.frame_count = 0
 
 	def __call__(self, payload: bytes) -> bool:
 		if not payload:
 			return True
+		
+		self.frame_count += 1
+		if self.debug and self.frame_count % 50 == 1:
+			print(f"[AUDIO] Playing frame {self.frame_count}, payload size: {len(payload)} bytes")
+		
 		decoded_pcm = _ulaw_bytes_to_lin16(payload)
-		return play_audio_frame(decoded_pcm, sample_rate=self.sample_rate, channels=self.channels, sample_width=2)
+		result = play_audio_frame(decoded_pcm, sample_rate=self.sample_rate, channels=self.channels, sample_width=2)
+		
+		if not result and self.debug:
+			print(f"[AUDIO] Frame {self.frame_count} playback failed")
+		
+		return result
 
 def play_audio_frame(
 	frame: bytes,
@@ -140,14 +152,18 @@ def play_audio_frame(
 	else:
 		raise ValueError(f"Unsupported sample_width: {sample_width}")
 
-	samples = np.frombuffer(frame, dtype=dtype)
-	if channels > 1:
-		# for stereo and above, shape as (frames, channels).
-		samples = samples.reshape(-1, channels)
-	
-	# prevents rtp receiver thread from blocking
-	sd.play(samples, samplerate=sample_rate, blocking=False)
-	return True
+	try:
+		samples = np.frombuffer(frame, dtype=dtype)
+		if channels > 1:
+			# for stereo and above, shape as (frames, channels).
+			samples = samples.reshape(-1, channels)
+		
+		# prevents rtp receiver thread from blocking
+		sd.play(samples, samplerate=sample_rate, blocking=False)
+		return True
+	except Exception as e:
+		print(f"[AUDIO ERROR] Failed to play frame: {e}")
+		return False
 
 
 def validate_mode(mode: str, audio_file: str = "") -> None:
