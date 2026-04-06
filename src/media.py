@@ -9,6 +9,7 @@ import time
 RTP_VERSION = 2
 RTP_HEADER_SIZE = 12
 RTCP_SR_PACKET_TYPE = 200
+RTCP_RR_PACKET_TYPE = 201
 NTP_UNIX_EPOCH_OFFSET = 2_208_988_800
 
 
@@ -60,12 +61,11 @@ def parse_rtp_packet(data):
 	}
 
 
-def build_rtcp_sr(ssrc, packet_count, octet_count):
-	"""	build rtcp sender report """
+def build_rtcp_sr(ssrc, packet_count, octet_count, rtp_timestamp=0):
+	"""build rtcp sender report based on rfc 3550"""
 	now = time.time()
 	ntp_seconds = int(now) + NTP_UNIX_EPOCH_OFFSET
 	ntp_fraction = int((now - int(now)) * (1 << 32))
-	rtp_timestamp = 0
 
 	# 28 bytes total means 7 words; RTCP length field stores (words - 1).
 	header = struct.pack("!BBH", RTP_VERSION << 6, RTCP_SR_PACKET_TYPE, 6)
@@ -74,11 +74,34 @@ def build_rtcp_sr(ssrc, packet_count, octet_count):
 		ssrc & 0xFFFFFFFF,
 		ntp_seconds & 0xFFFFFFFF,
 		ntp_fraction & 0xFFFFFFFF,
-		rtp_timestamp,
+		rtp_timestamp & 0xFFFFFFFF,
 		packet_count & 0xFFFFFFFF,
 		octet_count & 0xFFFFFFFF,
 	)
 	return header + body
+
+
+def build_rtcp_rr(ssrc, sender_ssrc, fraction_lost, cumulative_lost, 
+                  highest_seq, jitter, lsr=0, dlsr=0):
+	"""build rtcp receiver report  based on rfc 3550"""
+	# RC (reception report count) = 1
+	# 32 bytes total: 8 bytes header + 24 bytes report block = 8 words, length = 7
+	header = struct.pack("!BBH", (RTP_VERSION << 6) | 1, RTCP_RR_PACKET_TYPE, 7)
+	receiver_ssrc = struct.pack("!I", ssrc & 0xFFFFFFFF)
+	
+	# r	eport block for single source
+	report_block = struct.pack(
+		"!IBBHIIII",
+		sender_ssrc & 0xFFFFFFFF,
+		fraction_lost & 0xFF,
+		(cumulative_lost >> 16) & 0xFF,
+		cumulative_lost & 0xFFFF,
+		highest_seq & 0xFFFFFFFF,
+		int(jitter) & 0xFFFFFFFF,
+		lsr & 0xFFFFFFFF,
+		dlsr & 0xFFFFFFFF,
+	)
+	return header + receiver_ssrc + report_block
 
 
 def rtp_send_loop(sock, remote_addr, audio_source, stop_event):
@@ -94,6 +117,7 @@ def rtp_send_loop(sock, remote_addr, audio_source, stop_event):
 	packet_count = 0
 	octet_count = 0
 	next_send = time.monotonic()
+	last_timestamp = timestamp
 
 	for frame in audio_source:
 		if stop_event.is_set():
@@ -111,6 +135,7 @@ def rtp_send_loop(sock, remote_addr, audio_source, stop_event):
 		# for RTCP sender reports 
 		packet_count += 1
 		octet_count += len(frame)
+		last_timestamp = timestamp
 
 		# rtp sequence increments by 1 packet
 		seq = (seq + 1) & 0xFFFF
@@ -127,7 +152,7 @@ def rtp_send_loop(sock, remote_addr, audio_source, stop_event):
 		"ssrc": ssrc,
 		"packet_count": packet_count,
 		"octet_count": octet_count,
-		"timestamp": timestamp,
+		"timestamp": last_timestamp,
 		"sequence_number": seq,
 	}
 
@@ -137,12 +162,20 @@ def rtp_receive_loop(sock, audio_player, stop_event):
 	received_packets = 0
 	malformed_packets = 0
 	expected_seq = None
-	estimated_loss = 0
+	cumulative_lost = 0
+	highest_seq_received = 0
+	
+	# jitter calculation per RFC 3550 Appendix A.8
+	jitter = 0.0
+	last_transit = None
+	last_rtp_timestamp = 0
+	sender_ssrc = 0
 
 	sock.settimeout(0.5)
 	while not stop_event.is_set():
 		try:
 			data, _ = sock.recvfrom(65535)
+			arrival_time = time.time()
 		except TimeoutError:
 			continue
 		except OSError:
@@ -156,38 +189,116 @@ def rtp_receive_loop(sock, audio_player, stop_event):
 			continue
 
 		seq = packet["sequence_number"]
+		rtp_timestamp = packet["timestamp"]
+		sender_ssrc = packet["ssrc"]
+		
+		# track highest sequence number received
+		if received_packets == 0:
+			highest_seq_received = seq
+		else:
+			# handle sequence number wrapping
+			delta = (seq - highest_seq_received) & 0xFFFF
+			if delta < 32768:  # forward progression
+				if delta > 0:
+					highest_seq_received = seq
+		
+		# calculate packet loss
 		if expected_seq is not None:
 			delta = (seq - expected_seq) & 0xFFFF
-			if delta > 0:
-				# rough loss estimate: skipped sequence numbers
-				estimated_loss += max(0, delta - 1)
+			if delta > 0 and delta < 32768:
+				# packets were lost
+				cumulative_lost += delta
 
 		expected_seq = (seq + 1) & 0xFFFF
+		
+		# calculate interarrival jitter based sa rfc 3550 
+
+		transit = int(arrival_time * 8000) - rtp_timestamp
+		if last_transit is not None:
+			d = abs(transit - last_transit)
+			jitter += (d - jitter) / 16.0
+		last_transit = transit
+		last_rtp_timestamp = rtp_timestamp
+
 		audio_player(packet["payload"])
 		received_packets += 1
+
+	# calculate fraction lost for last interval (8-bit fixed point)
+	fraction_lost = 0
+	if expected_seq is not None and received_packets > 0:
+		expected_packets = ((highest_seq_received - (expected_seq - received_packets - cumulative_lost)) & 0xFFFF) + 1
+		if expected_packets > 0:
+			lost_interval = cumulative_lost
+			fraction_lost = min(255, int((lost_interval / expected_packets) * 256))
 
 	return {
 		"received_packets": received_packets,
 		"malformed_packets": malformed_packets,
-		"estimated_loss": estimated_loss,
+		"cumulative_lost": cumulative_lost,
+		"highest_seq": highest_seq_received,
+		"jitter": jitter,
+		"sender_ssrc": sender_ssrc,
+		"fraction_lost": fraction_lost,
 	}
 
 
 def rtcp_send_loop(sock, remote_addr, stop_event, stats):
-	"""send rtcp sender reports periodically gamit shared counters"""
+	"""send rtcp sender reports periodically using shared stats"""
 	interval = getattr(stats, "interval", 5.0)
 	while not stop_event.is_set():
 		packet_count = 0
 		octet_count = 0
+		rtp_timestamp = 0
 		ssrc = random.randint(0, 0xFFFFFFFF)
 
 		if isinstance(stats, dict):
 			packet_count = int(stats.get("packet_count", 0))
 			octet_count = int(stats.get("octet_count", 0))
+			rtp_timestamp = int(stats.get("timestamp", 0))
 			ssrc = int(stats.get("ssrc", ssrc))
 
-		sr = build_rtcp_sr(ssrc=ssrc, packet_count=packet_count, octet_count=octet_count)
+		sr = build_rtcp_sr(
+			ssrc=ssrc, 
+			packet_count=packet_count, 
+			octet_count=octet_count,
+			rtp_timestamp=rtp_timestamp
+		)
 		sock.sendto(sr, remote_addr)
+
+		if stop_event.wait(interval):
+			break
+
+
+def rtcp_send_rr_loop(sock, remote_addr, stop_event, receiver_stats):
+	"""send rtcp receiver reports periodically using receiver stats"""
+	interval = 5.0
+	receiver_ssrc = random.randint(0, 0xFFFFFFFF)
+	
+	while not stop_event.is_set():
+		sender_ssrc = 0
+		fraction_lost = 0
+		cumulative_lost = 0
+		highest_seq = 0
+		jitter = 0.0
+
+		if isinstance(receiver_stats, dict):
+			sender_ssrc = int(receiver_stats.get("sender_ssrc", 0))
+			fraction_lost = int(receiver_stats.get("fraction_lost", 0))
+			cumulative_lost = int(receiver_stats.get("cumulative_lost", 0))
+			highest_seq = int(receiver_stats.get("highest_seq", 0))
+			jitter = float(receiver_stats.get("jitter", 0.0))
+			receiver_ssrc = int(receiver_stats.get("receiver_ssrc", receiver_ssrc))
+
+		if sender_ssrc != 0:  # only send RR if we have received packets
+			rr = build_rtcp_rr(
+				ssrc=receiver_ssrc,
+				sender_ssrc=sender_ssrc,
+				fraction_lost=fraction_lost,
+				cumulative_lost=cumulative_lost,
+				highest_seq=highest_seq,
+				jitter=jitter,
+			)
+			sock.sendto(rr, remote_addr)
 
 		if stop_event.wait(interval):
 			break
