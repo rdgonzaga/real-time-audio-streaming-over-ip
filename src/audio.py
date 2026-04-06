@@ -127,7 +127,7 @@ def play_audio_frame(
 	channels: int = 1,
 	sample_width: int = 2,
 ) -> bool:
-	"""play one pcm frame"""
+	"""play one pcm frame using non-blocking audio to prevent packet loss"""
 	if not frame:
 		return True
 
@@ -144,7 +144,9 @@ def play_audio_frame(
 	if channels > 1:
 		# for stereo and above, shape as (frames, channels).
 		samples = samples.reshape(-1, channels)
-	sd.play(samples, samplerate=sample_rate, blocking=True)
+	
+	# prevents rtp receiver thread from blocking
+	sd.play(samples, samplerate=sample_rate, blocking=False)
 	return True
 
 
