@@ -222,7 +222,7 @@ class Peer:
         )
         self._send_sip(ack, addr, "ACK")
         self.state = CallState.ESTABLISHED
-        self._start_media(send_audio=True)
+        self._start_media(send_audio=(self.config.mode == "mic"))
 
     def call_peer(self, ip=None, port=None):
         if self.state != CallState.IDLE:
