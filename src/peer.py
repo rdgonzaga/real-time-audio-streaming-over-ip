@@ -361,7 +361,7 @@ class Peer:
 
         recv_thread = threading.Thread(
             target=rtp_receive_loop,
-            args=(self.rtp_socket, G711AudioPlayer(), self.media_stop, self.rtp_stats),
+            args=(self.rtp_socket, G711AudioPlayer(debug=True), self.media_stop, self.rtp_stats, True),  # Added debug=True
             daemon=True,
         )
         recv_thread.start()
