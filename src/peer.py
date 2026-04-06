@@ -360,6 +360,7 @@ class Peer:
 
         self.audio_player = G711AudioPlayer(debug=False)
 
+        # audio receiver thread (always on)
         recv_thread = threading.Thread(
             target=rtp_receive_loop,
             args=(self.rtp_socket, self.audio_player, self.media_stop, self.rtp_stats, False),
@@ -368,6 +369,7 @@ class Peer:
         recv_thread.start()
         self.media_threads.append(recv_thread)
 
+        # rtcp report receiver thread
         rr_thread = threading.Thread(
             target=rtcp_send_rr_loop,
             args=(self.rtcp_socket, remote_rtcp, self.media_stop, self.rtp_stats),
@@ -376,6 +378,7 @@ class Peer:
         rr_thread.start()
         self.media_threads.append(rr_thread)
 
+        # handle audio depending on set mode
         if send_audio and self.config.mode == "file":
             self.audio_source = G711AudioSource(self.config.audio_file)
 
@@ -417,6 +420,7 @@ class Peer:
         else:
             log(f"[MEDIA] Receive-only mode on RTP {self.call['local_rtp_port']}")
 
+    # halt everything, kill threads, and free resources but do NOT reset call state 
     def _stop_media(self):
         if self.media_stop:
             self.media_stop.set()
