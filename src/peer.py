@@ -25,11 +25,11 @@ import sys
 
 import random
 
-from audio import G711AudioPlayer, G711AudioSource, validate_mode
+from audio import G711AudioPlayer, G711AudioSource, G711MicrophoneSource, validate_mode
 from stats import RtpStats
 from rtp import rtp_receive_loop, rtp_send_loop
 from rtcp import rtcp_send_loop, rtcp_send_rr_loop
-from sip import SipMessage, build_100_trying, build_180_ringing, build_200_ok, build_200_ok_bye, build_ack, build_bye, build_invite, generate_call_id, generate_tag, parse_sdp, parse_sip_message
+from sip import SipMessage, build_200_ok, build_200_ok_bye, build_ack, build_bye, build_invite, generate_call_id, generate_tag, parse_sdp, parse_sip_message
 from utils import detect_local_ip, log
 
 class CallState(Enum):
@@ -63,6 +63,8 @@ class Peer:
         self.rtp_stats = None
         self.invite_msg = None
         self.call = None
+        self.audio_source = None
+        self.audio_player = None
 
     def start(self):
         self._start_sip_listener()
@@ -351,8 +353,23 @@ class Peer:
         # stop only old threads if needed but DO NOT close sockets
         if self.media_stop:
             self.media_stop.set()
+
+            if self.audio_source and hasattr(self.audio_source, "close"):
+                try:
+                    self.audio_source.close()
+                except Exception:
+                    pass
+                self.audio_source = None
+
             for t in self.media_threads:
                 t.join(timeout=0.2)
+
+            if self.audio_player and hasattr(self.audio_player, "close"):
+                try:
+                    self.audio_player.close()
+                except Exception:
+                    pass
+                self.audio_player = None
 
         self.media_stop = threading.Event()
         self.media_threads = []
@@ -361,9 +378,11 @@ class Peer:
         remote_rtp = (self.call["remote_rtp_ip"], self.call["remote_rtp_port"])
         remote_rtcp = (self.call["remote_rtp_ip"], self.call["remote_rtcp_port"])
 
+        self.audio_player = G711AudioPlayer(debug=False)
+
         recv_thread = threading.Thread(
             target=rtp_receive_loop,
-            args=(self.rtp_socket, G711AudioPlayer(debug=True), self.media_stop, self.rtp_stats, True),  # Added debug=True
+            args=(self.rtp_socket, self.audio_player, self.media_stop, self.rtp_stats, False),
             daemon=True,
         )
         recv_thread.start()
@@ -378,10 +397,11 @@ class Peer:
         self.media_threads.append(rr_thread)
 
         if send_audio and self.config.mode == "file":
-            source = G711AudioSource(self.config.audio_file)
+            self.audio_source = G711AudioSource(self.config.audio_file)
+
             send_thread = threading.Thread(
                 target=rtp_send_loop,
-                args=(self.rtp_socket, remote_rtp, source, self.media_stop, self.rtp_stats),
+                args=(self.rtp_socket, remote_rtp, self.audio_source, self.media_stop, self.rtp_stats),
                 daemon=True,
             )
             sr_thread = threading.Thread(
@@ -392,18 +412,54 @@ class Peer:
             send_thread.start()
             sr_thread.start()
             self.media_threads.extend([send_thread, sr_thread])
+
             log(f"[MEDIA] Sending file audio to {remote_rtp[0]}:{remote_rtp[1]}")
+
         elif send_audio and self.config.mode == "mic":
-            log("[MEDIA] Mic mode is not implemented yet in audio.py.")
+            self.audio_source = G711MicrophoneSource(debug=False)
+
+            send_thread = threading.Thread(
+                target=rtp_send_loop,
+                args=(self.rtp_socket, remote_rtp, self.audio_source, self.media_stop, self.rtp_stats),
+                daemon=True,
+            )
+            sr_thread = threading.Thread(
+                target=rtcp_send_loop,
+                args=(self.rtcp_socket, remote_rtcp, self.media_stop, self.rtp_stats),
+                daemon=True,
+            )
+            send_thread.start()
+            sr_thread.start()
+            self.media_threads.extend([send_thread, sr_thread])
+
+            log(f"[MEDIA] Sending live microphone audio to {remote_rtp[0]}:{remote_rtp[1]}")
+
         else:
             log(f"[MEDIA] Receive-only mode on RTP {self.call['local_rtp_port']}")
 
     def _stop_media(self):
         if self.media_stop:
             self.media_stop.set()
+
+        if self.audio_source and hasattr(self.audio_source, "close"):
+            try:
+                self.audio_source.close()
+            except Exception:
+                pass
+            self.audio_source = None
+
         self._close_media_sockets()
+
         for t in self.media_threads:
             t.join(timeout=0.2)
+
+        if self.audio_player and hasattr(self.audio_player, "close"):
+            try:
+                self.audio_player.close()
+            except Exception:
+                pass
+            self.audio_player = None
+
         self.media_stop = None
         self.media_threads = []
         self.rtp_stats = None
