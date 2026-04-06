@@ -440,9 +440,26 @@ class Peer:
     def _stop_media(self):
         if self.media_stop:
             self.media_stop.set()
+
+        if self.audio_source and hasattr(self.audio_source, "close"):
+            try:
+                self.audio_source.close()
+            except Exception:
+                pass
+            self.audio_source = None
+
         self._close_media_sockets()
+
         for t in self.media_threads:
             t.join(timeout=0.2)
+
+        if self.audio_player and hasattr(self.audio_player, "close"):
+            try:
+                self.audio_player.close()
+            except Exception:
+                pass
+            self.audio_player = None
+
         self.media_stop = None
         self.media_threads = []
         self.rtp_stats = None
