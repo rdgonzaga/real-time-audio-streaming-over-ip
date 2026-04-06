@@ -87,7 +87,7 @@ def rtp_send_loop(sock, remote_addr, audio_source, stop_event):
 	timestamp = random.randint(0, 0xFFFFFFFF)
 	ssrc = random.randint(0, 0xFFFFFFFF)
 
-	timestamp_step = getattr(audio_source, "timestamp_step", 160) # 160 samples per packet
+	timestamp_step = getattr(audio_source, "timestamp_step", 160) # 20ms at 8kHz G.711 clock
 	packet_interval = getattr(audio_source, "packet_interval", 0.02) # assumes 20ms packets
 	payload_type = getattr(audio_source, "payload_type", 0)
 
