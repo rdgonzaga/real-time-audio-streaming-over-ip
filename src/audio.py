@@ -223,7 +223,7 @@ class G711MicrophoneSource:
 			if len(ulaw_bytes) < G711_FRAME_SIZE:
 				ulaw_bytes += b"\xff" * (G711_FRAME_SIZE - len(ulaw_bytes))
 			elif len(ulaw_bytes) > G711_FRAME_SIZE:
-				ulaw_bytes =				ulaw_bytes = ulaw_bytes[:G711_FRAME_SIZE]
+				ulaw_bytes = ulaw_bytes[:G711_FRAME_SIZE]
 
 			if self.buffer.full():
 				try:
