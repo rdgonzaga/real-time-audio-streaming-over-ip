@@ -113,7 +113,7 @@ class Peer:
         if msg.message_type == "ACK":
             if self.state == CallState.INCOMING:
                 self.state = CallState.ESTABLISHED
-                self._start_media(send_audio=True)
+                self._start_media(send_audio=(self.config.mode == "mic"))
             return
 
         if msg.message_type == "BYE":
