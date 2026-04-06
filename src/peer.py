@@ -1,22 +1,3 @@
-# Main logic and command loop
-# REMARK: I think for the implementation of bonus, having one "peer" program is much better than having separate caller and callee programs.
-# Supported features should be: 
-    # a) file mode 
-    # b) mic mode
-    # c) call or answer a callable
-    # d) one-way or two-way streaming
-
-# program would have commands like:
-# a) call (ip) (port)
-# b) answer
-# c) hangup
-# mode file (filename)  - use file as source
-# mode mic              - use mic as soruce
-# quit
-# help                  - display commands ofc
-# setup                 - setup params like sip port and rtp port and stuff (in hindsight having a set (var) (val) command would also be nice)
-# show                  - display settings (and maybe current state?)
-
 import socket
 from dataclasses import dataclass
 from enum import Enum
@@ -77,7 +58,6 @@ class Peer:
         self._show_settings()
         print("Type 'help' to see commands.\n")
 
-    # Subject to change. But gets mo ba yung startup flow type shit
     def _show_settings(self):
         c = self.config
         print(f"Local IP     : {c.local_ip}")
@@ -571,16 +551,6 @@ Commands:
                 break
             except Exception as exc:
                 log(f"[ERROR] {exc}")
-    # def restart_sip_listener(self): ...
-    # def listen_for_sip(self): ...
-    # def handle_sip_packet(self, data, addr): ...
-    # def call(self, ip, port): ...
-    # def answer(self): ...
-    # def hangup(self): ...
-    # def start_media(self): ...
-    # def stop_media(self): ...
-    # def setup(self): ...
-    # def set_value(self): ...
 
 if __name__ == "__main__":
     peer = Peer()
