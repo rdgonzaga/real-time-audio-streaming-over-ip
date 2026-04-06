@@ -1,4 +1,4 @@
-# RTP package - Real-time Transport Protocol implementation
+# rtp package
 
 from .packet import build_rtp_packet, parse_rtp_packet
 from .jitter import JitterBuffer

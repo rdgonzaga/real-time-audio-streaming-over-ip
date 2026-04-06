@@ -1,4 +1,4 @@
-# RTCP package - Real-time Transport Control Protocol implementation
+# rtcp package 
 
 from .reports import build_rtcp_sr, build_rtcp_rr
 from .sender import rtcp_send_loop, rtcp_send_rr_loop
