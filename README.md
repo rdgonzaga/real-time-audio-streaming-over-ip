@@ -172,7 +172,7 @@ Caller                           Callee
   |                                 |
   |------------- ACK --------------→|
   |                                 |
-  |←======= RTP/RTCP Media ========→|
+  |←======== RTP/RTCP Media =======→|
   |                                 |
   |------------- BYE --------------→|
   |                                 |
@@ -286,180 +286,92 @@ Robust error recovery:
 - Proper resource cleanup on errors
 
 ---
-
 ## Test Cases and Sample Outputs
 
 ### Test Setup
 
-Two peers running on the same machine:
-- **Peer 1:** IP `192.168.1.100`, SIP Port `5060`
-- **Peer 2:** IP `192.168.1.100`, SIP Port `5062`
+Two peers running on the same machine/local network:
+- **Peer 1 (Caller):** IP `192.168.100.15`, SIP Port `5060`
+- **Peer 2 (Callee):** IP `192.168.100.15`, SIP Port `6767`
 
 ---
 
-### Test Case 1: SIP Call Establishment (INVITE, 200 OK, ACK)
+### Test Case 1: File-to-File Call Establishment
 
-**Peer 1 (Caller):**
-```
-voip> set peer_ip 192.168.1.100
-[APP] peer_ip updated.
-voip> set peer_sip 5062
-[APP] peer_sip updated.
-voip> set mode mic
+**Peer 1 (Caller - Port 5060):**
+```text
+voip> set mode file
 [APP] mode updated.
-voip> call
+voip> call 192.168.100.15 6767
 
-[SIP] INVITE sent to 192.168.1.100:5062
-
-[SIP] 200 OK from 192.168.1.100:5062
-[APP] Remote SDP: 192.168.1.100:24536
-[SIP] ACK sent to 192.168.1.100:5062
-[MEDIA] Starting media with send_audio=True
+[SIP] INVITE sent to 192.168.100.15:6767
+[SIP] 200 OK from 192.168.100.15:6767
+[SIP] ACK sent to 192.168.100.15:6767
+[MEDIA] Sending file audio to 192.168.100.15:25166
 ```
 
-**Peer 2 (Callee):**
-```
-[SIP] INVITE from 192.168.1.100:5060
+**Peer 2 (Callee - Port 6767):**
+```text
+voip> set mode file
+[APP] mode updated.
+[SIP] INVITE from 192.168.100.15:5060
 [APP] Incoming call. Use 'answer' to accept.
 
 voip> answer
 
-[SIP] 200 OK sent to 192.168.1.100:5060
+[SIP] 200 OK sent to 192.168.100.15:5060
 [SIP] Waiting for ACK...
-
-[SIP] ACK from 192.168.1.100:5060
-[MEDIA] Starting media with send_audio=True
+[SIP] ACK from 192.168.100.15:5060
+[MEDIA] Sending file audio to 192.168.100.15:26114
 ```
 
 ---
 
-### Test Case 2: RTP Audio Streaming
-
-**Peer 1 Output (during call):**
-```
-[MEDIA] Sending live microphone audio to 192.168.1.100:24536
-[MEDIA] Receive-only mode on RTP 22748
-[RTP RECV] Starting receive loop, listening for packets...
-[RTP RECV] First packet received, starting sequence at 15234
-[RTP RECV] Jitter buffer initialized with 5 packets, starting playback...
-```
-
-**Peer 2 Output (during call):**
-```
-[MEDIA] Sending live microphone audio to 192.168.1.100:22748
-[MEDIA] Receive-only mode on RTP 24536
-[RTP RECV] Starting receive loop, listening for packets...
-[RTP RECV] First packet received, starting sequence at 8921
-[RTP RECV] Jitter buffer initialized with 5 packets, starting playback...
-```
-
----
-
-### Test Case 3: RTCP Reporting
-
-**RTCP Sender Report (every 5 seconds):**
-```
-[RTCP] Sending SR: SSRC=3845729184, packets=245, octets=39200
-[RTCP] Sending SR: SSRC=3845729184, packets=492, octets=78720
-```
-
-**RTCP Receiver Report (every 5 seconds):**
-```
-[RTCP] Sending RR: sender_ssrc=2193847562, lost=0, jitter=2.3
-[RTCP] Sending RR: sender_ssrc=2193847562, lost=0, jitter=1.8
-```
-
----
-
-### Test Case 4: Call Termination (BYE)
+### Test Case 2: Call Termination (Hangup)
 
 **Peer 1 (Initiates Hangup):**
-```
+```text
 voip> hangup
 
-[SIP] BYE sent to 192.168.1.100:5062
-[MEDIA] Media threads stopped
-[MEDIA] RTP/RTCP sockets closed
-[APP] Call state reset to IDLE
-
-[SIP] 200 OK from 192.168.1.100:5062
+[SIP] BYE sent to 192.168.100.15:6767
+[SIP] 200 OK from 192.168.100.15:6767
 [SIP] BYE completed.
 ```
 
 **Peer 2 (Receives Hangup):**
-```
-[SIP] BYE from 192.168.1.100:5060
-[SIP] 200 OK sent to 192.168.1.100:5060
-[MEDIA] Media threads stopped
-[MEDIA] RTP/RTCP sockets closed
+```text
+[SIP] BYE from 192.168.100.15:5060
+[SIP] 200 OK sent to 192.168.100.15:5060
 [APP] Call ended by remote side.
 ```
 
 ---
 
-### Test Case 5: Error Handling
+### Test Case 3: Two-Way Microphone Call
 
-**Scenario: Call to offline peer**
-```
-voip> call 192.168.1.200 5060
+**Peer 1 (Caller - Port 5060):**
+```text
+voip> set mode mic
+[APP] mode updated.
+voip> call 192.168.100.15 6767
 
-[SIP] INVITE sent to 192.168.1.200:5060
-[SIP] Waiting for response...
-(timeout after 30 seconds, no crash)
-```
-
-**Scenario: Malformed RTP packet**
-```
-[RTP RECV] Malformed packet: Invalid RTP version
-(packet ignored, receiver continues)
+[SIP] INVITE sent to 192.168.100.15:6767
+[SIP] 200 OK from 192.168.100.15:6767
+[SIP] ACK sent to 192.168.100.15:6767
+[MEDIA] Sending live microphone audio to 192.168.100.15:34430
 ```
 
----
+**Peer 2 (Callee - Port 6767):**
+```text
+voip> set mode mic
+[APP] mode updated.
+[SIP] INVITE from 192.168.100.15:5060
+[APP] Incoming call. Use 'answer' to accept.
 
-## Testing Instructions
+voip> answer
 
-### Test 1: File-to-File Communication
-
-1. **Peer 1:**
-   ```bash
-   voip> set mode file
-   voip> set audio sample.wav
-   voip> call 192.168.1.101 5062
-   ```
-
-2. **Peer 2:**
-   ```bash
-   voip> answer
-   ```
-
-3. **Expected:** Peer 2 hears audio from sample.wav
-
-### Test 2: Two-Way Microphone Call
-
-1. **Both peers:** 
-   ```bash
-   voip> set mode mic
-   ```
-
-2. **Peer 1:** 
-   ```bash
-   voip> call 192.168.1.101 5062
-   ```
-
-3. **Peer 2:** 
-   ```bash
-   voip> answer
-   ```
-
-4. **Expected:** Both peers can hear each other in real-time
-
-### Test 3: Call Rejection
-
-1. **Peer 1:** 
-   ```bash
-   voip> call 192.168.1.101 5062
-   ```
-
-2. **Peer 2:** Simply don't answer or quit
-
-3. **Expected:** Call times out gracefully, no crash
+[SIP] 200 OK sent to 192.168.100.15:5060
+[SIP] Waiting for ACK...
+[SIP] ACK from 192.168.100.15:5060
+[MEDIA] Sending live microphone audio to 192.168.100.15:28542
+```
