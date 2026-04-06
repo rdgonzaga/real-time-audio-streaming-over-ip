@@ -116,22 +116,61 @@ class G711AudioPlayer:
 		self.channels = channels
 		self.debug = debug
 		self.frame_count = 0
+		self.stream = None
+		self._initialize_stream()
+
+	def _initialize_stream(self):
+		"""Initialize a persistent audio output stream"""
+		try:
+			self.stream = sd.OutputStream(
+				samplerate=self.sample_rate,
+				channels=self.channels,
+				dtype='int16',
+				blocksize=G711_FRAME_SIZE,  # 160 samples per frame
+			)
+			self.stream.start()
+			if self.debug:
+				print(f"[AUDIO] Output stream initialized: {self.sample_rate}Hz, {self.channels} channel(s)")
+		except Exception as e:
+			print(f"[AUDIO ERROR] Failed to initialize output stream: {e}")
+			self.stream = None
 
 	def __call__(self, payload: bytes) -> bool:
 		if not payload:
 			return True
 		
+		if self.stream is None:
+			if self.debug:
+				print("[AUDIO ERROR] No audio stream available")
+			return False
+		
 		self.frame_count += 1
 		if self.debug and self.frame_count % 50 == 1:
 			print(f"[AUDIO] Playing frame {self.frame_count}, payload size: {len(payload)} bytes")
 		
-		decoded_pcm = _ulaw_bytes_to_lin16(payload)
-		result = play_audio_frame(decoded_pcm, sample_rate=self.sample_rate, channels=self.channels, sample_width=2)
-		
-		if not result and self.debug:
-			print(f"[AUDIO] Frame {self.frame_count} playback failed")
-		
-		return result
+		try:
+			decoded_pcm = _ulaw_bytes_to_lin16(payload)
+			samples = np.frombuffer(decoded_pcm, dtype=np.int16)
+			
+			# Write to the persistent stream instead of creating new streams
+			self.stream.write(samples)
+			return True
+		except Exception as e:
+			if self.debug:
+				print(f"[AUDIO ERROR] Frame {self.frame_count} playback failed: {e}")
+			return False
+	
+	def close(self):
+		"""Close the audio stream"""
+		if self.stream:
+			try:
+				self.stream.stop()
+				self.stream.close()
+				if self.debug:
+					print("[AUDIO] Output stream closed")
+			except Exception as e:
+				print(f"[AUDIO ERROR] Failed to close stream: {e}")
+			self.stream = None
 
 def play_audio_frame(
 	frame: bytes,

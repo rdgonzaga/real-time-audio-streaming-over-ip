@@ -406,6 +406,10 @@ def rtp_receive_loop(sock, audio_player, stop_event, stats: RtpStats = None, deb
 		if not payload:
 			break
 		audio_player(payload)
+	
+	# close audio stream if it has a close method
+	if hasattr(audio_player, 'close'):
+		audio_player.close()
 
 	# calculate final fraction lost
 	fraction_lost = 0
