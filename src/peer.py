@@ -26,7 +26,9 @@ import sys
 import random
 
 from audio import G711AudioPlayer, G711AudioSource, validate_mode
-from media import RtpStats, rtp_receive_loop, rtp_send_loop, rtcp_send_loop, rtcp_send_rr_loop
+from stats import RtpStats
+from rtp import rtp_receive_loop, rtp_send_loop
+from rtcp import rtcp_send_loop, rtcp_send_rr_loop
 from sip import SipMessage, build_100_trying, build_180_ringing, build_200_ok, build_200_ok_bye, build_ack, build_bye, build_invite, generate_call_id, generate_tag, parse_sdp, parse_sip_message
 from utils import detect_local_ip, log
 
