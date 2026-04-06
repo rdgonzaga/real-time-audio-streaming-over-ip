@@ -5,10 +5,6 @@ from .sdp import (
 	SdpInfo,
 	build_sdp,
 	parse_sdp,
-	DEFAULT_CODEC,
-	DEFAULT_PAYLOAD_TYPE,
-	DEFAULT_SAMPLE_RATE,
-	DEFAULT_CHANNELS,
 )
 
 # sip message exports
@@ -24,6 +20,14 @@ from .messages import (
 	build_100_trying,
 	build_180_ringing,
 	parse_sip_message,
+)
+
+# import constants from parent module
+from constants import (
+	DEFAULT_CODEC,
+	DEFAULT_PAYLOAD_TYPE,
+	DEFAULT_SAMPLE_RATE,
+	DEFAULT_CHANNELS,
 )
 
 __all__ = [
