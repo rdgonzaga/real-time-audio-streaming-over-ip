@@ -13,7 +13,7 @@ RTP_HEADER_SIZE = 12
 RTCP_SR_PACKET_TYPE = 200
 RTCP_RR_PACKET_TYPE = 201
 NTP_UNIX_EPOCH_OFFSET = 2_208_988_800
-JITTER_BUFFER_SIZE = 5  # number of packets to buffer
+JITTER_BUFFER_SIZE = 2  # number of packets to buffer
 
 
 class RtpStats:
@@ -278,7 +278,7 @@ def rtp_send_loop(sock, remote_addr, audio_source, stop_event, stats: RtpStats =
 	}
 
 
-def rtp_receive_loop(sock, audio_player, stop_event, stats: RtpStats = None):
+def rtp_receive_loop(sock, audio_player, stop_event, stats: RtpStats = None, debug: bool = False):
 	"""receive rtp packets, buffer with jitter buffer, and forward to audio_player"""
 	received_packets = 0
 	malformed_packets = 0
@@ -300,6 +300,9 @@ def rtp_receive_loop(sock, audio_player, stop_event, stats: RtpStats = None):
 	if stats:
 		stats.update_receiver(receiver_ssrc=receiver_ssrc)
 
+	if debug:
+		print(f"[RTP RECV] Starting receive loop, listening for packets...")
+
 	sock.settimeout(0.5)
 	while not stop_event.is_set():
 		try:
@@ -317,18 +320,25 @@ def rtp_receive_loop(sock, audio_player, stop_event, stats: RtpStats = None):
 
 		try:
 			packet = parse_rtp_packet(data)
-		except ValueError:
+		except ValueError as e:
 			# ignore malformed packets and keep receiver alive.
 			malformed_packets += 1
+			if debug:
+				print(f"[RTP RECV] Malformed packet: {e}")
 			continue
 
 		seq = packet["sequence_number"]
 		rtp_timestamp = packet["timestamp"]
 		sender_ssrc = packet["ssrc"]
 		
+		if debug and received_packets < 5:
+			print(f"[RTP RECV] Packet #{received_packets+1}: seq={seq}, timestamp={rtp_timestamp}, payload={len(packet['payload'])} bytes")
+		
 		# track highest sequence number received
 		if received_packets == 0:
 			highest_seq_received = seq
+			if debug:
+				print(f"[RTP RECV] First packet received, starting sequence at {seq}")
 		else:
 			# handle sequence number wrapping
 			delta = (seq - highest_seq_received) & 0xFFFF
@@ -380,9 +390,15 @@ def rtp_receive_loop(sock, audio_player, stop_event, stats: RtpStats = None):
 		
 		# play packets from jitter buffer if ready
 		if jitter_buffer.is_ready():
+			if debug and received_packets == JITTER_BUFFER_SIZE:
+				print(f"[RTP RECV] Jitter buffer initialized with {JITTER_BUFFER_SIZE} packets, starting playback...")
+			
 			payload = jitter_buffer.get_next_packet()
 			if payload:
 				audio_player(payload)
+
+	if debug:
+		print(f"[RTP RECV] Receive loop ended. Total packets: {received_packets}, Malformed: {malformed_packets}, Lost: {cumulative_lost}")
 
 	# flush remaining packets from jitter buffer
 	while True:
