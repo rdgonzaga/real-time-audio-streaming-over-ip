@@ -261,8 +261,7 @@ RTP Control Protocol provides statistics and quality monitoring based on RFC 355
 - Captures live audio from default input device
 - Real-time encoding to G.711 μ-law
 - Non-blocking queue-based delivery
-- Comfort noise generation on timeout
-- Supports full-duplex communication
+- Supports two way communication
 
 **Playback:**
 - Decodes G.711 μ-law to PCM
@@ -271,7 +270,7 @@ RTP Control Protocol provides statistics and quality monitoring based on RFC 355
 
 ### 6. **Two-Way Communication (Bonus Feature)**
 
-Full-duplex bidirectional audio streaming:
+Full-duplex/Two-way audio streaming:
 - Simultaneous RTP send and receive
 - Independent audio threads for each direction
 - Separate RTCP SR and RR reporting
@@ -281,8 +280,7 @@ Full-duplex bidirectional audio streaming:
 ### 7. **Error Handling**
 
 Robust error recovery:
-- Graceful handling of 4xx/5xx SIP errors
-- Malformed packet detection and logging
+- Handling of 4xx/5xx SIP errors
 - Socket timeout handling
 - No crashes on unexpected input
 - Proper resource cleanup on errors
