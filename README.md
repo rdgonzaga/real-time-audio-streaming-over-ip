@@ -19,9 +19,11 @@ A peer-to-peer VoIP application implementing SIP for call signaling and RTP/RTCP
 
 ## Installation
 
-1. **Extract the project archive:**
-   - Extract the downloaded ZIP file to a folder on your computer
-   - Navigate to the extracted folder
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/rdgonzaga/real-time-audio-streaming-over-ip.git
+   cd real-time-audio-streaming-over-ip
+   ```
 
 2. **Create a virtual environment (recommended):**
    ```bash
